@@ -93,6 +93,19 @@ td{padding:8px 6px;border-bottom:1px solid var(--border)}
 .history-row .hw{font-weight:700;font-size:15px}
 .history-row .hd{font-size:12px;color:var(--muted)}
 .history-row .hx{color:var(--muted);background:none;border:none;font-size:18px;cursor:pointer;padding:4px 8px}
+
+.btn-export{width:100%;margin-top:12px;background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:10px;border-radius:8px}
+
+.milestones{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto}
+.ms{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.ms.reached{background:var(--green);color:#fff}
+.ms.next{border:2px solid var(--accent);color:var(--accent);animation:pulse 2s infinite}
+.ms.future{border:1px solid var(--border);color:var(--muted)}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,0.3)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}
+
+.collapse-header{display:flex;align-items:center;justify-content:space-between;padding:12px 0;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;border-top:1px solid var(--border);margin-top:16px}
+.collapse-body{display:none}
+.collapse-body.open{display:block}
 </style>
 </head>
 <body>
@@ -109,11 +122,14 @@ const CONFIG = {
 
 const LS_CFG = 'recomp_cfg';
 const LS_ENT = 'recomp_ent';
+const LS_MEAS = 'recomp_meas';
 
 function getConfig() { try { return JSON.parse(localStorage.getItem(LS_CFG)); } catch { return null; } }
 function setConfig(c) { localStorage.setItem(LS_CFG, JSON.stringify(c)); }
 function getEntries() { try { return JSON.parse(localStorage.getItem(LS_ENT)) || []; } catch { return []; } }
 function setEntries(e) { localStorage.setItem(LS_ENT, JSON.stringify(e)); }
+function getMeasurements() { try { return JSON.parse(localStorage.getItem(LS_MEAS)) || []; } catch { return []; } }
+function setMeasurements(m) { localStorage.setItem(LS_MEAS, JSON.stringify(m)); }
 
 async function api(method, body) {
   try {
@@ -143,12 +159,14 @@ function showSync(state) {
 
 let currentTab = 'coach';
 let trendChart = null;
+let waistChart = null;
 
 async function boot() {
   const data = await api('GET');
   if (data && data.config) {
     setConfig(data.config);
     setEntries(data.entries || []);
+    if (data.measurements) setMeasurements(data.measurements);
     renderMain();
   } else if (data && !data.config) {
     renderSetup();
@@ -276,7 +294,36 @@ function calcAll() {
   }
   const daysSinceLastLog = latest ? Math.round(daysBetween(latest.date, today)) : null;
 
-  return { sw, sbf, gbl, gbh, lm, gwLo, gwHi, cals, protein, startDate, entries, latest, cw, cbf, lost, pct, weeklyAvgs, rate, ma7, today, loggedToday, streak, daysSinceLastLog };
+  const measurements = getMeasurements();
+  const latestWaist = measurements.length ? measurements[measurements.length - 1] : null;
+  const prevWaist = measurements.length >= 2 ? measurements[measurements.length - 2] : null;
+  const waistDelta = (latestWaist && prevWaist) ? latestWaist.waist - prevWaist.waist : null;
+  let waistShrinking = false;
+  if (measurements.length >= 2) {
+    const twoWeeksAgo = measurements.filter(m => daysBetween(m.date, today) >= 14);
+    if (twoWeeksAgo.length) {
+      waistShrinking = latestWaist.waist < twoWeeksAgo[twoWeeksAgo.length - 1].waist;
+    }
+  }
+
+  const milestones = [];
+  const startBFFloor = Math.floor(sbf);
+  const goalBFCeil = Math.ceil(gbl);
+  for (let ms = startBFFloor; ms >= goalBFCeil; ms--) {
+    milestones.push({ pct: ms, reached: cbf < ms });
+  }
+  let newMilestone = null;
+  if (weeklyAvgs.length >= 2) {
+    const lastWeekAvg = weeklyAvgs[weeklyAvgs.length - 2].avg;
+    const lastWeekBF = (1 - lm / lastWeekAvg) * 100;
+    const reached = milestones.filter(m => m.reached);
+    if (reached.length) {
+      const latestMs = reached[reached.length - 1];
+      if (lastWeekBF >= latestMs.pct) newMilestone = latestMs.pct;
+    }
+  }
+
+  return { sw, sbf, gbl, gbh, lm, gwLo, gwHi, cals, protein, startDate, entries, latest, cw, cbf, lost, pct, weeklyAvgs, rate, ma7, today, loggedToday, streak, daysSinceLastLog, measurements, latestWaist, prevWaist, waistDelta, waistShrinking, milestones, newMilestone };
 }
 
 function renderMain() {
@@ -322,9 +369,10 @@ function renderMain() {
       <div class="stat"><div class="val">${fmt(d.cbf)}</div><div class="lbl">BF%</div></div>
       <div class="stat"><div class="val">${fmt(d.lost)}</div><div class="lbl">Lost</div></div>
     </div>
-    <div class="stats" style="grid-template-columns:repeat(2,1fr)">
+    <div class="stats" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat"><div class="val">${d.rate !== null ? fmt(Math.abs(d.rate)) : '—'}</div><div class="lbl">kg/wk</div></div>
       <div class="stat"><div class="val" style="color:${streakColor}">${d.streak}</div><div class="lbl">Streak days</div></div>
+      <div class="stat"><div class="val">${d.latestWaist ? fmt(d.latestWaist.waist) : '—'}</div><div class="lbl">Waist${d.waistDelta !== null ? ' <span style="color:' + (d.waistDelta <= 0 ? 'var(--green)' : 'var(--red)') + '">' + (d.waistDelta <= 0 ? '' : '+') + fmt(d.waistDelta) + '</span>' : ''}</div></div>
     </div>
     <div class="tabs">
       <div class="tab ${currentTab === 'coach' ? 'active' : ''}" onclick="switchTab('coach')">Coach</div>
@@ -391,6 +439,13 @@ function renderCoach(el, d) {
         { emoji: '🚶', title: 'Add 2,000 steps', detail: 'A small activity bump may be enough.' },
         { emoji: '⏳', title: 'Or just wait', detail: 'Weight loss isn\'t linear — you may see a drop soon.' }
       ];
+    } else if (d.waistShrinking) {
+      status = 'recomp'; color = 'var(--green)'; bannerBg = 'rgba(34,197,94,0.1)';
+      title = 'Recomping'; message = 'Weight is flat but your waist is shrinking — that\'s body recomposition working. Keep going.';
+      actions = [
+        { emoji: '✅', title: 'Stay the course', detail: 'Your body is changing even if the scale isn\'t.' },
+        { emoji: '🥩', title: 'Keep protein high', detail: 'Hit ' + d.protein + 'g daily to protect lean mass.' }
+      ];
     } else {
       status = 'stall'; color = 'var(--amber)'; bannerBg = 'rgba(245,158,11,0.1)';
       title = 'Plateau detected'; message = 'Weight hasn\'t moved meaningfully. Time to make a change.';
@@ -413,7 +468,30 @@ function renderCoach(el, d) {
   const plannedWeeks = d.sw > d.gwLo ? (d.sw - d.gwLo) / 0.4 : 0;
   const actualWeeks = d.rate !== null && Math.abs(d.rate) > 0.01 ? (d.cw - d.gwLo) / Math.abs(d.rate) : null;
 
+  let celebHtml = '';
+  if (d.newMilestone !== null) {
+    celebHtml = `<div class="card" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.2);margin-bottom:12px;text-align:center;padding:12px">🎉 New milestone — you've crossed below ${d.newMilestone}% body fat!</div>`;
+  }
+
+  let msHtml = '';
+  if (d.milestones.length) {
+    msHtml = '<div class="milestones">';
+    let nextFound = false;
+    d.milestones.forEach(m => {
+      if (m.reached) {
+        msHtml += `<div class="ms reached">${m.pct}</div>`;
+      } else if (!nextFound) {
+        nextFound = true;
+        msHtml += `<div class="ms next">${m.pct}</div>`;
+      } else {
+        msHtml += `<div class="ms future">${m.pct}</div>`;
+      }
+    });
+    msHtml += '</div>';
+  }
+
   let html = `<div class="banner" style="background:${bannerBg}"><span class="bdot" style="background:${color}"></span><div class="banner-body"><h3 style="color:${color}">${title}</h3><p>${message}</p></div></div>`;
+  html += celebHtml + msHtml;
   actions.forEach(a => {
     const applyBtn = a.applyCals
       ? `<button class="apply-btn" onclick="applyCals(${a.applyCals}, this)">Apply</button>`
@@ -444,7 +522,21 @@ function renderLog(el) {
       </div>
       <button class="btn-primary" style="width:100%;margin-top:14px" onclick="logWeight()">Log weight</button>
     </div>
-    <p class="tip">Every morning — after bathroom, before food or water.<br>Missing a day is fine.</p>`;
+    <p class="tip">Every morning — after bathroom, before food or water.<br>Missing a day is fine.</p>
+    <div class="collapse-header" onclick="toggleWaist()">
+      <span>📏 Weekly waist measurement</span>
+      <span id="waist-arrow">▸</span>
+    </div>
+    <div class="collapse-body" id="waist-section">
+      <div class="card" style="margin-top:8px">
+        <div class="grid-2">
+          <div><label>Date</label><input id="waist-date" type="date" value="${today}"></div>
+          <div><label>Waist (cm)</label><input id="waist-val" type="number" step="0.1" inputmode="decimal" placeholder="cm"></div>
+        </div>
+        <button style="width:100%;margin-top:14px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-weight:600;padding:10px;border-radius:8px" onclick="logWaist()">Log measurement</button>
+      </div>
+      <p class="tip">Measure once a week at navel level, morning, relaxed.<br>More reliable than weight for tracking fat loss.</p>
+    </div>`;
   setTimeout(() => document.getElementById('log-weight')?.focus(), 50);
 }
 
@@ -468,6 +560,28 @@ async function logWeight() {
   showSync(r ? 'saved' : 'offline');
 }
 
+function toggleWaist() {
+  const sec = document.getElementById('waist-section');
+  const arrow = document.getElementById('waist-arrow');
+  sec.classList.toggle('open');
+  arrow.textContent = sec.classList.contains('open') ? '▾' : '▸';
+}
+
+async function logWaist() {
+  const date = document.getElementById('waist-date').value;
+  const waist = parseFloat(document.getElementById('waist-val').value);
+  if (!date || isNaN(waist)) return;
+  const meas = getMeasurements();
+  const idx = meas.findIndex(m => m.date === date);
+  if (idx >= 0) meas[idx].waist = waist;
+  else { meas.push({ date, waist }); meas.sort((a, b) => a.date.localeCompare(b.date)); }
+  setMeasurements(meas);
+  renderMain();
+  showSync('saving');
+  const r = await api('POST', { action: 'logWaist', date, waist });
+  showSync(r ? 'saved' : 'offline');
+}
+
 function renderTrend(el, d) {
   if (d.entries.length < 2) {
     el.innerHTML = '<div class="card" style="text-align:center;padding:40px 16px;color:var(--muted)">Log at least 2 weights to see trends.</div>';
@@ -483,7 +597,18 @@ function renderTrend(el, d) {
     </div>
     <canvas id="trend-canvas" height="220"></canvas>`;
 
-  setTimeout(() => buildChart(d), 50);
+  if (d.measurements.length >= 2) {
+    el.innerHTML += `
+      <div style="margin-top:20px">
+        <div class="legend"><span><span class="swatch" style="background:#06b6d4;height:3px"></span> Waist (cm)</span></div>
+        <canvas id="waist-canvas" height="150"></canvas>
+      </div>`;
+  }
+
+  setTimeout(() => {
+    buildChart(d);
+    if (d.measurements.length >= 2) buildWaistChart(d);
+  }, 50);
 }
 
 function buildChart(d) {
@@ -562,20 +687,56 @@ function buildChart(d) {
   });
 }
 
+function buildWaistChart(d) {
+  const canvas = document.getElementById('waist-canvas');
+  if (!canvas) return;
+  if (waistChart) { waistChart.destroy(); waistChart = null; }
+  const labels = d.measurements.map(m => m.date);
+  const data = d.measurements.map(m => m.waist);
+  waistChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label: 'Waist', data, borderColor: '#06b6d4', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#06b6d4', tension: 0.3 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e293b', titleColor: '#e2e8f0', bodyColor: '#e2e8f0', borderColor: '#334155', borderWidth: 1,
+          callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + ' cm' }
+        }
+      }
+    }
+  });
+}
+
 function renderWeekly(el, d) {
   if (!d.weeklyAvgs.length) {
     el.innerHTML = '<div class="card" style="text-align:center;padding:40px 16px;color:var(--muted)">No weekly data yet.</div>';
     return;
   }
 
-  let html = '<table><thead><tr><th>Wk</th><th>Avg kg</th><th>Δ</th><th>Days</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Wk</th><th>Avg kg</th><th>Δ</th><th>Days</th><th>Waist</th></tr></thead><tbody>';
   d.weeklyAvgs.forEach((w, i) => {
     const prev = i === 0 ? d.sw : d.weeklyAvgs[i - 1].avg;
     const delta = w.avg - prev;
     let clr = 'var(--green)';
     if (delta > 0) clr = 'var(--red)';
     else if (delta < -0.55) clr = 'var(--amber)';
-    html += `<tr><td>${w.wk}</td><td>${fmt(w.avg)}</td><td style="color:${clr}">${delta >= 0 ? '+' : ''}${fmt(delta)}</td><td>${w.days}/7</td></tr>`;
+    const wkStart = new Date(d.startDate + 'T12:00:00');
+    wkStart.setDate(wkStart.getDate() + (w.wk - 1) * 7);
+    const wkEnd = new Date(wkStart);
+    wkEnd.setDate(wkEnd.getDate() + 7);
+    const waistEntry = d.measurements.find(m => m.date >= wkStart.toISOString().slice(0, 10) && m.date < wkEnd.toISOString().slice(0, 10));
+    const waistVal = waistEntry ? fmt(waistEntry.waist) : '–';
+    html += `<tr><td>${w.wk}</td><td>${fmt(w.avg)}</td><td style="color:${clr}">${delta >= 0 ? '+' : ''}${fmt(delta)}</td><td>${w.days}/7</td><td>${waistVal}</td></tr>`;
   });
   html += '</tbody></table>';
   el.innerHTML = html;
@@ -594,7 +755,19 @@ function renderHistory(el, d) {
     html += `<div class="history-row"><div><span class="hw">${fmt(e.weight)} kg</span><br><span class="hd">${fmtDate}</span></div><button class="hx" onclick="deleteEntry('${e.date}')">×</button></div>`;
   });
   html += '</div>';
+  html += '<button class="btn-export" onclick="exportData()">📥 Export backup</button>';
   el.innerHTML = html;
+}
+
+function exportData() {
+  const data = { config: getConfig(), entries: getEntries(), measurements: getMeasurements(), exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'body-recomp-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function deleteEntry(date) {
@@ -627,6 +800,7 @@ async function resetAll() {
   if (!confirm('Reset all data? This cannot be undone.')) return;
   localStorage.removeItem(LS_CFG);
   localStorage.removeItem(LS_ENT);
+  localStorage.removeItem(LS_MEAS);
   showSync('saving');
   const r = await api('POST', { action: 'saveAll', config: {}, entries: [] });
   showSync(r ? 'saved' : 'offline');

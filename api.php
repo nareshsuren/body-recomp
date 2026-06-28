@@ -31,6 +31,7 @@ try {
     $db->exec('PRAGMA journal_mode=WAL');
     $db->exec('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)');
     $db->exec('CREATE TABLE IF NOT EXISTS entries (date TEXT PRIMARY KEY, weight REAL)');
+    $db->exec('CREATE TABLE IF NOT EXISTS measurements (date TEXT PRIMARY KEY, waist REAL)');
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $action = $_GET['action'] ?? '';
@@ -52,7 +53,13 @@ try {
                 $e['weight'] = (float)$e['weight'];
             }
 
-            echo json_encode(['ok' => true, 'config' => $config, 'entries' => $entries]);
+            $stmt = $db->query('SELECT date, waist FROM measurements ORDER BY date ASC');
+            $measurements = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($measurements as &$m) {
+                $m['waist'] = (float)$m['waist'];
+            }
+
+            echo json_encode(['ok' => true, 'config' => $config, 'entries' => $entries, 'measurements' => $measurements]);
         } else {
             echo json_encode(['ok' => false, 'error' => 'Unknown action']);
         }
@@ -80,6 +87,16 @@ try {
             $stmt->execute([$body['date']]);
             echo json_encode(['ok' => true]);
 
+        } elseif ($action === 'logWaist') {
+            $stmt = $db->prepare('INSERT OR REPLACE INTO measurements (date, waist) VALUES (?, ?)');
+            $stmt->execute([$body['date'], (float)$body['waist']]);
+            echo json_encode(['ok' => true]);
+
+        } elseif ($action === 'deleteWaist') {
+            $stmt = $db->prepare('DELETE FROM measurements WHERE date = ?');
+            $stmt->execute([$body['date']]);
+            echo json_encode(['ok' => true]);
+
         } elseif ($action === 'saveAll') {
             $db->beginTransaction();
             $db->exec('DELETE FROM config');
@@ -94,6 +111,13 @@ try {
                 $stmt = $db->prepare('INSERT INTO entries (date, weight) VALUES (?, ?)');
                 foreach ($body['entries'] as $e) {
                     $stmt->execute([$e['date'], (float)$e['weight']]);
+                }
+            }
+            $db->exec('DELETE FROM measurements');
+            if (!empty($body['measurements'])) {
+                $stmt = $db->prepare('INSERT INTO measurements (date, waist) VALUES (?, ?)');
+                foreach ($body['measurements'] as $m) {
+                    $stmt->execute([$m['date'], (float)$m['waist']]);
                 }
             }
             $db->commit();
