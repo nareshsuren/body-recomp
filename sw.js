@@ -1,4 +1,4 @@
-const CACHE_NAME = 'recomp-v1';
+const CACHE_NAME = 'recomp-v2';
 const ASSETS = [
   './index.html',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js'
