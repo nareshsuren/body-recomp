@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Body Recomp Tracker</title>
+<link rel="manifest" href="./manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f172a;--surface:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#2563eb;--cyan:#06b6d4;--green:#22c55e;--lime:#84cc16;--amber:#f59e0b;--orange:#f97316;--red:#ef4444}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);max-width:480px;margin:0 auto;min-height:100dvh;padding:16px;padding-top:env(safe-area-inset-top,16px)}
+input,button,select{font-family:inherit;font-size:inherit}
+input{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;width:100%}
+input:focus{outline:none;border-color:var(--accent)}
+button{cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-weight:600;transition:opacity .15s}
+button:active{opacity:.8}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-ghost{background:transparent;color:var(--muted);padding:6px 10px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.hidden{display:none!important}
+
+#sync{position:fixed;top:env(safe-area-inset-top,8px);right:12px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 8px;font-size:12px;display:flex;align-items:center;gap:6px;z-index:100;opacity:0;transition:opacity .3s}
+#sync.show{opacity:1}
+#sync .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.header{text-align:center;margin-bottom:20px}
+.header h1{font-size:22px;font-weight:700}
+.header .sub{font-size:13px;color:var(--muted);margin-top:2px}
+.header-actions{display:flex;justify-content:center;gap:8px;margin-top:10px}
+
+.progress-wrap{margin-bottom:20px}
+.progress-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+.progress-bar{height:24px;background:var(--surface);border-radius:12px;overflow:hidden;position:relative;border:1px solid var(--border)}
+.progress-fill{height:100%;border-radius:12px;background:linear-gradient(90deg,var(--accent),var(--cyan));transition:width .5s}
+.progress-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 6px;text-align:center}
+.stat .val{font-size:18px;font-weight:700}
+.stat .lbl{font-size:11px;color:var(--muted);margin-top:2px}
+
+.tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--surface);border-radius:10px;padding:4px}
+.tab{flex:1;text-align:center;padding:8px 4px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s}
+.tab.active{background:var(--accent);color:#fff}
+
+.banner{border-radius:10px;padding:14px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px}
+.banner .bdot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.banner-body h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.banner-body p{font-size:13px;opacity:.85;line-height:1.4}
+
+.action-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+.action-card .emoji{font-size:20px;margin-bottom:4px}
+.action-card strong{display:block;font-size:14px;margin-bottom:2px}
+.action-card p{font-size:12px;color:var(--muted);line-height:1.4}
+
+.eta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.eta-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.eta-box .eta-label{font-size:11px;color:var(--muted);margin-bottom:4px}
+.eta-box .eta-val{font-size:18px;font-weight:700}
+.eta-box .eta-sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+.ref-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ref-box{border-radius:10px;padding:12px;text-align:center}
+.ref-box .ref-val{font-size:20px;font-weight:700}
+.ref-box .ref-lbl{font-size:11px;margin-top:2px}
+
+.log-input{font-size:28px;text-align:center;padding:14px;font-weight:700}
+.tip{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.5}
+
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;font-size:12px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend .swatch{width:12px;height:3px;border-radius:2px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--border)}
+td{padding:8px 6px;border-bottom:1px solid var(--border)}
+
+.history-list{max-height:340px;overflow-y:auto}
+.history-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.history-row .hw{font-weight:700;font-size:15px}
+.history-row .hd{font-size:12px;color:var(--muted)}
+.history-row .hx{color:var(--muted);background:none;border:none;font-size:18px;cursor:pointer;padding:4px 8px}
+</style>
+</head>
+<body>
+
+<div id="sync"><span class="dot"></span><span class="msg"></span></div>
+
+<div id="app"></div>
+
+<script>
+const CONFIG = {
+  API_URL: './api.php',
+  TOKEN: 'PASTE_YOUR_TOKEN_HERE'
+};
+
+const LS_CFG = 'recomp_cfg';
+const LS_ENT = 'recomp_ent';
+
+function getConfig() { try { return JSON.parse(localStorage.getItem(LS_CFG)); } catch { return null; } }
+function setConfig(c) { localStorage.setItem(LS_CFG, JSON.stringify(c)); }
+function getEntries() { try { return JSON.parse(localStorage.getItem(LS_ENT)) || []; } catch { return []; } }
+function setEntries(e) { localStorage.setItem(LS_ENT, JSON.stringify(e)); }
+
+async function api(method, body) {
+  try {
+    const opts = { method, headers: { 'X-Api-Token': CONFIG.TOKEN } };
+    let url = CONFIG.API_URL;
+    if (method === 'GET') {
+      url += '?action=load';
+    } else {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(url, opts);
+    const j = await r.json();
+    return j.ok ? j : null;
+  } catch { return null; }
+}
+
+function showSync(state) {
+  const el = document.getElementById('sync');
+  const dot = el.querySelector('.dot');
+  const msg = el.querySelector('.msg');
+  el.classList.add('show');
+  if (state === 'saving') { dot.style.background = '#f59e0b'; msg.textContent = 'Saving…'; }
+  else if (state === 'saved') { dot.style.background = '#22c55e'; msg.textContent = 'Saved'; setTimeout(() => el.classList.remove('show'), 2000); }
+  else if (state === 'offline') { dot.style.background = '#ef4444'; msg.textContent = 'Offline — saved locally'; }
+}
+
+let currentTab = 'coach';
+let trendChart = null;
+
+function boot() {
+  const cfg = getConfig();
+  if (cfg) {
+    renderMain();
+    api('GET').then(data => {
+      if (data) {
+        if (data.config) setConfig(data.config);
+        setEntries(data.entries || []);
+        renderMain();
+      }
+    });
+  } else {
+    api('GET').then(data => {
+      if (data && data.config) {
+        setConfig(data.config);
+        setEntries(data.entries || []);
+        renderMain();
+      } else {
+        renderSetup();
+      }
+    });
+  }
+}
+
+function renderSetup(existing) {
+  const cfg = existing || {};
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('app').innerHTML = `
+    <div class="header"><h1>Body Recomp</h1><p class="sub">Setup your tracker</p></div>
+    <div class="card">
+      <div class="grid-2">
+        <div><label>Start weight (kg)</label><input id="sw" type="number" step="0.1" value="${cfg.startWeight || 77.4}"></div>
+        <div><label>Body fat %</label><input id="sbf" type="number" step="0.1" value="${cfg.startBF || 27}"></div>
+        <div><label>Goal BF% low</label><input id="gbl" type="number" step="0.1" value="${cfg.goalBFLow || 20}"></div>
+        <div><label>Goal BF% high</label><input id="gbh" type="number" step="0.1" value="${cfg.goalBFHigh || 22}"></div>
+        <div><label>Daily calories</label><input id="dc" type="number" value="${cfg.dailyCals || 2075}"></div>
+        <div><label>Daily protein (g)</label><input id="dp" type="number" value="${cfg.dailyProtein || 155}"></div>
+      </div>
+      <div style="margin-top:12px"><label>Start date</label><input id="sd" type="date" value="${cfg.startDate || today}"></div>
+      <button class="btn-primary" style="width:100%;margin-top:16px" onclick="saveSetup()">Save &amp; Start</button>
+    </div>`;
+}
+
+async function saveSetup() {
+  const cfg = {
+    startWeight: document.getElementById('sw').value,
+    startBF: document.getElementById('sbf').value,
+    goalBFLow: document.getElementById('gbl').value,
+    goalBFHigh: document.getElementById('gbh').value,
+    dailyCals: document.getElementById('dc').value,
+    dailyProtein: document.getElementById('dp').value,
+    startDate: document.getElementById('sd').value
+  };
+  setConfig(cfg);
+  renderMain();
+  showSync('saving');
+  const r = await api('POST', { action: 'saveConfig', config: cfg });
+  showSync(r ? 'saved' : 'offline');
+}
+
+function num(v) { return parseFloat(v) || 0; }
+function fmt(v, d) { return v.toFixed(d === undefined ? 1 : d); }
+function daysBetween(a, b) { return (new Date(b) - new Date(a)) / 86400000; }
+
+function calcAll() {
+  const c = getConfig();
+  const entries = getEntries();
+  const sw = num(c.startWeight);
+  const sbf = num(c.startBF);
+  const gbl = num(c.goalBFLow);
+  const gbh = num(c.goalBFHigh);
+  const lm = sw * (1 - sbf / 100);
+  const gwLo = lm / (1 - gbl / 100);
+  const gwHi = lm / (1 - gbh / 100);
+  const cals = num(c.dailyCals);
+  const protein = num(c.dailyProtein);
+  const startDate = c.startDate;
+  const latest = entries.length ? entries[entries.length - 1] : null;
+  const cw = latest ? latest.weight : sw;
+  const cbf = (1 - lm / cw) * 100;
+  const lost = sw - cw;
+  const pct = sw > gwLo ? Math.min(100, Math.max(0, (lost / (sw - gwLo)) * 100)) : 0;
+
+  const weeklyAvgs = [];
+  if (entries.length && startDate) {
+    const weeks = {};
+    entries.forEach(e => {
+      const d = daysBetween(startDate, e.date);
+      if (d < 0) return;
+      const wk = Math.floor(d / 7) + 1;
+      if (!weeks[wk]) weeks[wk] = [];
+      weeks[wk].push(e.weight);
+    });
+    const wkNums = Object.keys(weeks).map(Number).sort((a, b) => a - b);
+    wkNums.forEach(wk => {
+      const vals = weeks[wk];
+      weeklyAvgs.push({ wk, avg: vals.reduce((s, v) => s + v, 0) / vals.length, days: vals.length });
+    });
+  }
+
+  let rate = null;
+  if (weeklyAvgs.length >= 2) {
+    const n = Math.min(4, weeklyAvgs.length);
+    const recent = weeklyAvgs.slice(-n);
+    const xs = recent.map((_, i) => i);
+    const ys = recent.map(w => w.avg);
+    const mx = xs.reduce((s, v) => s + v, 0) / n;
+    const my = ys.reduce((s, v) => s + v, 0) / n;
+    let num_ = 0, den = 0;
+    for (let i = 0; i < n; i++) {
+      num_ += (xs[i] - mx) * (ys[i] - my);
+      den += (xs[i] - mx) ** 2;
+    }
+    rate = den ? num_ / den : 0;
+  }
+
+  const ma7 = entries.map((e, i) => {
+    const d = new Date(e.date);
+    const window = entries.filter(x => {
+      const dx = new Date(x.date);
+      const diff = (d - dx) / 86400000;
+      return diff >= 0 && diff < 7;
+    });
+    return { date: e.date, avg: window.reduce((s, v) => s + v.weight, 0) / window.length };
+  });
+
+  return { sw, sbf, gbl, gbh, lm, gwLo, gwHi, cals, protein, startDate, entries, latest, cw, cbf, lost, pct, weeklyAvgs, rate, ma7 };
+}
+
+function renderMain() {
+  const d = calcAll();
+  const c = getConfig();
+  const sinceDate = new Date(d.startDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <h1>Body Recomp</h1>
+      <p class="sub">Since ${sinceDate}</p>
+      <div class="header-actions">
+        <button class="btn-sm btn-ghost" onclick="editSetup()">Edit</button>
+        <button class="btn-sm btn-ghost" style="color:var(--red)" onclick="resetAll()">Reset</button>
+      </div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-labels"><span>${fmt(d.sw)} kg</span><span>${fmt(d.gwLo)} kg</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.max(0, Math.min(100, d.pct))}%"></div><div class="progress-pct">${fmt(d.pct, 0)}%</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="val">${fmt(d.cw)}</div><div class="lbl">Weight</div></div>
+      <div class="stat"><div class="val">${fmt(d.cbf)}</div><div class="lbl">BF%</div></div>
+      <div class="stat"><div class="val">${fmt(d.lost)}</div><div class="lbl">Lost</div></div>
+      <div class="stat"><div class="val">${d.rate !== null ? fmt(Math.abs(d.rate)) : '—'}</div><div class="lbl">kg/wk</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${currentTab === 'coach' ? 'active' : ''}" onclick="switchTab('coach')">Coach</div>
+      <div class="tab ${currentTab === 'log' ? 'active' : ''}" onclick="switchTab('log')">Log</div>
+      <div class="tab ${currentTab === 'trend' ? 'active' : ''}" onclick="switchTab('trend')">Trend</div>
+      <div class="tab ${currentTab === 'weekly' ? 'active' : ''}" onclick="switchTab('weekly')">Weekly</div>
+      <div class="tab ${currentTab === 'history' ? 'active' : ''}" onclick="switchTab('history')">History</div>
+    </div>
+    <div id="tab-content"></div>`;
+
+  renderTab();
+}
+
+function switchTab(t) { currentTab = t; renderTab(); document.querySelector(`.tab.active`)?.classList.remove('active'); document.querySelectorAll('.tab').forEach(el => { if (el.textContent.toLowerCase() === t) el.classList.add('active'); }); }
+
+function renderTab() {
+  const d = calcAll();
+  const el = document.getElementById('tab-content');
+  if (!el) return;
+  if (currentTab === 'coach') renderCoach(el, d);
+  else if (currentTab === 'log') renderLog(el, d);
+  else if (currentTab === 'trend') renderTrend(el, d);
+  else if (currentTab === 'weekly') renderWeekly(el, d);
+  else if (currentTab === 'history') renderHistory(el, d);
+}
+
+function renderCoach(el, d) {
+  let status, color, bannerBg, title, message, actions;
+
+  if (d.rate === null || d.weeklyAvgs.length < 2) {
+    status = 'neutral'; color = 'var(--muted)'; bannerBg = 'rgba(148,163,184,0.1)';
+    title = 'Collecting data'; message = 'Log your weight daily. Coaching starts after 2 weeks of data.';
+    actions = [{ emoji: '⚖️', title: 'Weigh yourself daily', detail: 'Every morning — after bathroom, before food or water.' }];
+  } else {
+    const r = d.rate;
+    const absR = Math.abs(r);
+    if (r > 0.05) {
+      status = 'gaining'; color = 'var(--red)'; bannerBg = 'rgba(239,68,68,0.1)';
+      title = 'Weight trending up'; message = 'You\'re gaining weight. Time to tighten up your intake and increase activity.';
+      actions = [
+        { emoji: '🔥', title: 'Cut 200 kcal', detail: 'Reduce daily intake to ' + (d.cals - 200) + ' kcal.' },
+        { emoji: '📊', title: 'Audit weekends', detail: 'Weekend eating is the most common culprit.' },
+        { emoji: '🚶', title: 'Add 3,000 steps', detail: 'Easy way to increase daily expenditure.' }
+      ];
+    } else if (absR > 0.55) {
+      status = 'fast'; color = 'var(--orange)'; bannerBg = 'rgba(249,115,22,0.1)';
+      title = 'Losing too fast'; message = 'Great progress, but this pace risks muscle loss. Slow down slightly.';
+      actions = [
+        { emoji: '⬆️', title: 'Add 100 kcal back', detail: 'Increase to ' + (d.cals + 100) + ' kcal to protect muscle.' },
+        { emoji: '💪', title: 'Protect gym intensity', detail: 'Don\'t cut volume or load — muscle needs the stimulus.' }
+      ];
+    } else if (absR >= 0.3) {
+      status = 'great'; color = 'var(--green)'; bannerBg = 'rgba(34,197,94,0.1)';
+      title = 'Perfect pace'; message = 'You\'re losing at the ideal rate for preserving muscle. Keep doing exactly this.';
+      actions = [
+        { emoji: '✅', title: 'Change nothing', detail: 'Your current approach is working perfectly.' },
+        { emoji: '🥩', title: 'Keep protein high', detail: 'Hit ' + d.protein + 'g daily to protect lean mass.' }
+      ];
+    } else if (absR >= 0.15) {
+      status = 'good'; color = 'var(--lime)'; bannerBg = 'rgba(132,204,22,0.1)';
+      title = 'Slightly slow'; message = 'You\'re losing, but a bit under the ideal rate. Consider a small adjustment.';
+      actions = [
+        { emoji: '🔥', title: 'Cut 100 kcal', detail: 'Reduce to ' + (d.cals - 100) + ' kcal.' },
+        { emoji: '🚶', title: 'Add 2,000 steps', detail: 'A small activity bump may be enough.' },
+        { emoji: '⏳', title: 'Or just wait', detail: 'Weight loss isn\'t linear — you may see a drop soon.' }
+      ];
+    } else {
+      status = 'stall'; color = 'var(--amber)'; bannerBg = 'rgba(245,158,11,0.1)';
+      title = 'Plateau detected'; message = 'Weight hasn\'t moved meaningfully. Time to make a change.';
+      actions = [
+        { emoji: '🔥', title: 'Cut 150 kcal', detail: 'Reduce to ' + (d.cals - 150) + ' kcal.' },
+        { emoji: '🚶', title: 'Add 3,000 steps', detail: 'Increase non-exercise activity.' },
+        { emoji: '🏸', title: 'Add badminton', detail: 'Fun cardio that doesn\'t feel like cardio.' },
+        { emoji: '⏳', title: 'Or wait a week', detail: 'Plateaus often break on their own. Give it 7 days.' }
+      ];
+    }
+  }
+
+  const plannedWeeks = d.sw > d.gwLo ? (d.sw - d.gwLo) / 0.4 : 0;
+  const actualWeeks = d.rate !== null && Math.abs(d.rate) > 0.01 ? (d.cw - d.gwLo) / Math.abs(d.rate) : null;
+
+  let html = `<div class="banner" style="background:${bannerBg}"><span class="bdot" style="background:${color}"></span><div class="banner-body"><h3 style="color:${color}">${title}</h3><p>${message}</p></div></div>`;
+  actions.forEach(a => { html += `<div class="action-card"><div class="emoji">${a.emoji}</div><strong>${a.title}</strong><p>${a.detail}</p></div>`; });
+
+  html += `<div class="eta-row" style="margin-top:14px">
+    <div class="eta-box"><div class="eta-label">Planned pace</div><div class="eta-val">${fmt(plannedWeeks, 0)}</div><div class="eta-sub">weeks at 0.4 kg/wk</div></div>
+    <div class="eta-box"><div class="eta-label">Your actual pace</div><div class="eta-val">${actualWeeks !== null ? fmt(actualWeeks, 0) : '—'}</div><div class="eta-sub">${d.rate !== null ? 'weeks at ' + fmt(Math.abs(d.rate)) + ' kg/wk' : 'need more data'}</div></div>
+  </div>`;
+
+  html += `<div class="ref-row">
+    <div class="ref-box" style="background:rgba(245,158,11,0.1)"><div class="ref-val" style="color:var(--amber)">${d.cals}</div><div class="ref-lbl" style="color:var(--amber)">calories</div></div>
+    <div class="ref-box" style="background:rgba(6,182,212,0.1)"><div class="ref-val" style="color:var(--cyan)">${d.protein}g</div><div class="ref-lbl" style="color:var(--cyan)">protein</div></div>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+function renderLog(el) {
+  const today = new Date().toISOString().slice(0, 10);
+  el.innerHTML = `
+    <div class="card">
+      <div class="grid-2">
+        <div><label>Date</label><input id="log-date" type="date" value="${today}"></div>
+        <div><label>Weight (kg)</label><input id="log-weight" class="log-input" type="number" step="0.1" inputmode="decimal" placeholder="0.0"></div>
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:14px" onclick="logWeight()">Log weight</button>
+    </div>
+    <p class="tip">Every morning — after bathroom, before food or water.<br>Missing a day is fine.</p>`;
+  setTimeout(() => document.getElementById('log-weight')?.focus(), 50);
+}
+
+async function logWeight() {
+  const date = document.getElementById('log-date').value;
+  const weight = parseFloat(document.getElementById('log-weight').value);
+  if (!date || isNaN(weight)) return;
+
+  const entries = getEntries();
+  const idx = entries.findIndex(e => e.date === date);
+  if (idx >= 0) entries[idx].weight = weight;
+  else {
+    entries.push({ date, weight });
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  setEntries(entries);
+  renderMain();
+
+  showSync('saving');
+  const r = await api('POST', { action: 'logWeight', date, weight });
+  showSync(r ? 'saved' : 'offline');
+}
+
+function renderTrend(el, d) {
+  if (d.entries.length < 2) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:40px 16px;color:var(--muted)">Log at least 2 weights to see trends.</div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="legend">
+      <span><span class="swatch" style="background:#334155"></span> Planned</span>
+      <span><span class="swatch" style="background:#f59e0b"></span> Your pace</span>
+      <span><span class="swatch" style="background:#2563eb;height:3px"></span> 7d trend</span>
+      <span><span class="swatch" style="background:#64748b;height:6px;width:6px;border-radius:50%"></span> Actual</span>
+    </div>
+    <canvas id="trend-canvas" height="220"></canvas>`;
+
+  setTimeout(() => buildChart(d), 50);
+}
+
+function buildChart(d) {
+  const canvas = document.getElementById('trend-canvas');
+  if (!canvas) return;
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+
+  const labels = d.entries.map(e => e.date);
+  const actual = d.entries.map(e => e.weight);
+  const trend7 = d.ma7.map(m => m.avg);
+
+  const planned = d.entries.map(e => {
+    const weeks = daysBetween(d.startDate, e.date) / 7;
+    return Math.max(d.gwLo, d.sw - 0.4 * weeks);
+  });
+
+  let yourPace = new Array(d.entries.length).fill(null);
+  if (d.rate !== null && d.entries.length > 0) {
+    const lastW = d.entries[d.entries.length - 1].weight;
+    const lastDate = d.entries[d.entries.length - 1].date;
+    yourPace = d.entries.map(e => {
+      const weeks = daysBetween(lastDate, e.date) / 7;
+      return lastW + d.rate * weeks;
+    });
+  }
+
+  const yMin = Math.floor(d.gwLo - 1);
+  const yMax = Math.ceil(d.sw + 0.5);
+
+  const goalPlugin = {
+    id: 'goalLines',
+    afterDraw(chart) {
+      const { ctx, scales: { y }, chartArea } = chart;
+      [d.gwHi, d.gwLo].forEach(val => {
+        const yPos = y.getPixelForValue(val);
+        ctx.save();
+        ctx.strokeStyle = '#22c55e';
+        ctx.setLineDash([6, 4]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, yPos);
+        ctx.lineTo(chartArea.right, yPos);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+  };
+
+  trendChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Planned', data: planned, borderColor: '#334155', borderDash: [6, 3], borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { label: 'Your pace', data: yourPace, borderColor: '#f59e0b', borderDash: [6, 3], borderWidth: 1.5, pointRadius: 0, tension: 0 },
+        { label: '7d trend', data: trend7, borderColor: '#2563eb', borderWidth: 2.5, pointRadius: 0, tension: 0.3 },
+        { label: 'Actual', data: actual, borderColor: 'transparent', backgroundColor: '#64748b', pointRadius: 3, pointStyle: 'circle', showLine: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
+        y: { min: yMin, max: yMax, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e293b', titleColor: '#e2e8f0', bodyColor: '#e2e8f0', borderColor: '#334155', borderWidth: 1,
+          callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' kg' }
+        }
+      }
+    },
+    plugins: [goalPlugin]
+  });
+}
+
+function renderWeekly(el, d) {
+  if (!d.weeklyAvgs.length) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:40px 16px;color:var(--muted)">No weekly data yet.</div>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>Wk</th><th>Avg kg</th><th>Δ</th><th>Days</th></tr></thead><tbody>';
+  d.weeklyAvgs.forEach((w, i) => {
+    const prev = i === 0 ? d.sw : d.weeklyAvgs[i - 1].avg;
+    const delta = w.avg - prev;
+    let clr = 'var(--green)';
+    if (delta > 0) clr = 'var(--red)';
+    else if (delta < -0.55) clr = 'var(--amber)';
+    html += `<tr><td>${w.wk}</td><td>${fmt(w.avg)}</td><td style="color:${clr}">${delta >= 0 ? '+' : ''}${fmt(delta)}</td><td>${w.days}/7</td></tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function renderHistory(el, d) {
+  if (!d.entries.length) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:40px 16px;color:var(--muted)">No entries yet.</div>';
+    return;
+  }
+
+  const sorted = [...d.entries].reverse();
+  let html = '<div class="history-list">';
+  sorted.forEach(e => {
+    const fmtDate = new Date(e.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    html += `<div class="history-row"><div><span class="hw">${fmt(e.weight)} kg</span><br><span class="hd">${fmtDate}</span></div><button class="hx" onclick="deleteEntry('${e.date}')">×</button></div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function deleteEntry(date) {
+  const entries = getEntries().filter(e => e.date !== date);
+  setEntries(entries);
+  renderMain();
+  showSync('saving');
+  const r = await api('POST', { action: 'deleteEntry', date });
+  showSync(r ? 'saved' : 'offline');
+}
+
+function editSetup() {
+  renderSetup(getConfig());
+}
+
+async function resetAll() {
+  if (!confirm('Reset all data? This cannot be undone.')) return;
+  localStorage.removeItem(LS_CFG);
+  localStorage.removeItem(LS_ENT);
+  showSync('saving');
+  const r = await api('POST', { action: 'saveAll', config: {}, entries: [] });
+  showSync(r ? 'saved' : 'offline');
+  renderSetup();
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js');
+}
+
+boot();
+</script>
+</body>
+</html>
