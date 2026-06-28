@@ -138,27 +138,21 @@ function showSync(state) {
 let currentTab = 'coach';
 let trendChart = null;
 
-function boot() {
-  const cfg = getConfig();
-  if (cfg) {
+async function boot() {
+  const data = await api('GET');
+  if (data && data.config) {
+    setConfig(data.config);
+    setEntries(data.entries || []);
     renderMain();
-    api('GET').then(data => {
-      if (data) {
-        if (data.config) setConfig(data.config);
-        setEntries(data.entries || []);
-        renderMain();
-      }
-    });
+  } else if (data && !data.config) {
+    renderSetup();
   } else {
-    api('GET').then(data => {
-      if (data && data.config) {
-        setConfig(data.config);
-        setEntries(data.entries || []);
-        renderMain();
-      } else {
-        renderSetup();
-      }
-    });
+    const cfg = getConfig();
+    if (cfg) {
+      renderMain();
+    } else {
+      renderSetup();
+    }
   }
 }
 
