@@ -46,6 +46,10 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 .stat .val{font-size:18px;font-weight:700}
 .stat .lbl{font-size:11px;color:var(--muted);margin-top:2px}
 
+.nudge{display:flex;align-items:center;gap:10px;background:#1c1305;border:1px solid #3d2e08;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px}
+.nudge-link{color:var(--amber);font-weight:600;margin-left:auto;cursor:pointer;white-space:nowrap}
+.last-log{font-size:12px;margin-top:2px}
+
 .tabs{display:flex;gap:4px;margin-bottom:16px;background:var(--surface);border-radius:10px;padding:4px}
 .tab{flex:1;text-align:center;padding:8px 4px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s}
 .tab.active{background:var(--accent);color:#fff}
@@ -258,7 +262,19 @@ function calcAll() {
     return { date: e.date, avg: window.reduce((s, v) => s + v.weight, 0) / window.length };
   });
 
-  return { sw, sbf, gbl, gbh, lm, gwLo, gwHi, cals, protein, startDate, entries, latest, cw, cbf, lost, pct, weeklyAvgs, rate, ma7 };
+  const today = new Date().toISOString().slice(0, 10);
+  const loggedToday = entries.some(e => e.date === today);
+  const dateSet = new Set(entries.map(e => e.date));
+  let streak = 0;
+  const checkDate = new Date(today + 'T12:00:00');
+  if (!loggedToday) checkDate.setDate(checkDate.getDate() - 1);
+  while (dateSet.has(checkDate.toISOString().slice(0, 10))) {
+    streak++;
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+  const daysSinceLastLog = latest ? Math.round(daysBetween(latest.date, today)) : null;
+
+  return { sw, sbf, gbl, gbh, lm, gwLo, gwHi, cals, protein, startDate, entries, latest, cw, cbf, lost, pct, weeklyAvgs, rate, ma7, today, loggedToday, streak, daysSinceLastLog };
 }
 
 function renderMain() {
@@ -266,10 +282,29 @@ function renderMain() {
   const c = getConfig();
   const sinceDate = new Date(d.startDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
 
+  let lastLogHtml = '';
+  if (d.entries.length) {
+    if (d.loggedToday) {
+      lastLogHtml = '<span class="last-log" style="color:var(--green)">Logged today ✓</span>';
+    } else if (d.daysSinceLastLog === 1) {
+      lastLogHtml = '<span class="last-log" style="color:var(--muted)">Last: yesterday</span>';
+    } else if (d.daysSinceLastLog >= 2) {
+      const lastDate = new Date(d.latest.date + 'T12:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      lastLogHtml = '<span class="last-log" style="color:var(--amber)">Last: ' + lastDate + '</span>';
+    }
+  }
+
+  const nudgeHtml = !d.loggedToday
+    ? '<div class="nudge">⚖️ <span>You haven\'t logged today</span><span class="nudge-link" onclick="switchTab(\'log\')">Log now</span></div>'
+    : '';
+
+  const streakColor = d.streak >= 3 ? 'var(--green)' : d.streak >= 1 ? 'var(--amber)' : 'var(--muted)';
+
   document.getElementById('app').innerHTML = `
     <div class="header">
       <h1>Body Recomp</h1>
       <p class="sub">Since ${sinceDate}</p>
+      ${lastLogHtml}
       <div class="header-actions">
         <button class="btn-sm btn-ghost" onclick="editSetup()">Edit</button>
         <button class="btn-sm btn-ghost" style="color:var(--red)" onclick="resetAll()">Reset</button>
@@ -279,11 +314,15 @@ function renderMain() {
       <div class="progress-labels"><span>${fmt(d.sw)} kg</span><span>${fmt(d.gwLo)} kg</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${Math.max(0, Math.min(100, d.pct))}%"></div><div class="progress-pct">${fmt(d.pct, 0)}%</div></div>
     </div>
-    <div class="stats">
+    ${nudgeHtml}
+    <div class="stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px">
       <div class="stat"><div class="val">${fmt(d.cw)}</div><div class="lbl">Weight</div></div>
       <div class="stat"><div class="val">${fmt(d.cbf)}</div><div class="lbl">BF%</div></div>
       <div class="stat"><div class="val">${fmt(d.lost)}</div><div class="lbl">Lost</div></div>
+    </div>
+    <div class="stats" style="grid-template-columns:repeat(2,1fr)">
       <div class="stat"><div class="val">${d.rate !== null ? fmt(Math.abs(d.rate)) : '—'}</div><div class="lbl">kg/wk</div></div>
+      <div class="stat"><div class="val" style="color:${streakColor}">${d.streak}</div><div class="lbl">Streak days</div></div>
     </div>
     <div class="tabs">
       <div class="tab ${currentTab === 'coach' ? 'active' : ''}" onclick="switchTab('coach')">Coach</div>
@@ -360,6 +399,13 @@ function renderCoach(el, d) {
         { emoji: '⏳', title: 'Or wait a week', detail: 'Plateaus often break on their own. Give it 7 days.' }
       ];
     }
+  }
+
+  if (d.streak >= 7) {
+    message += ' You\'ve logged ' + d.streak + ' days straight — that consistency is what drives results.';
+  }
+  if (d.daysSinceLastLog !== null && d.daysSinceLastLog >= 2) {
+    message += ' You haven\'t logged in ' + d.daysSinceLastLog + ' days. Getting back on the scale is the first step — the number doesn\'t matter, the habit does.';
   }
 
   const plannedWeeks = d.sw > d.gwLo ? (d.sw - d.gwLo) / 0.4 : 0;
