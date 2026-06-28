@@ -63,6 +63,8 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 .action-card .emoji{font-size:20px;margin-bottom:4px}
 .action-card strong{display:block;font-size:14px;margin-bottom:2px}
 .action-card p{font-size:12px;color:var(--muted);line-height:1.4}
+.action-card .apply-btn{float:right;border:1px solid var(--accent);color:var(--accent);background:none;border-radius:14px;font-size:11px;font-weight:600;padding:4px 12px;min-height:44px;cursor:pointer;transition:all .15s}
+.action-card .apply-btn:active{opacity:.7}
 
 .eta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
 .eta-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
@@ -363,7 +365,7 @@ function renderCoach(el, d) {
       status = 'gaining'; color = 'var(--red)'; bannerBg = 'rgba(239,68,68,0.1)';
       title = 'Weight trending up'; message = 'You\'re gaining weight. Time to tighten up your intake and increase activity.';
       actions = [
-        { emoji: '🔥', title: 'Cut 200 kcal', detail: 'Reduce daily intake to ' + (d.cals - 200) + ' kcal.' },
+        { emoji: '🔥', title: 'Cut 200 kcal', detail: 'Reduce daily intake to ' + (d.cals - 200) + ' kcal.', applyCals: d.cals - 200 },
         { emoji: '📊', title: 'Audit weekends', detail: 'Weekend eating is the most common culprit.' },
         { emoji: '🚶', title: 'Add 3,000 steps', detail: 'Easy way to increase daily expenditure.' }
       ];
@@ -371,7 +373,7 @@ function renderCoach(el, d) {
       status = 'fast'; color = 'var(--orange)'; bannerBg = 'rgba(249,115,22,0.1)';
       title = 'Losing too fast'; message = 'Great progress, but this pace risks muscle loss. Slow down slightly.';
       actions = [
-        { emoji: '⬆️', title: 'Add 100 kcal back', detail: 'Increase to ' + (d.cals + 100) + ' kcal to protect muscle.' },
+        { emoji: '⬆️', title: 'Add 100 kcal back', detail: 'Increase to ' + (d.cals + 100) + ' kcal to protect muscle.', applyCals: d.cals + 100 },
         { emoji: '💪', title: 'Protect gym intensity', detail: 'Don\'t cut volume or load — muscle needs the stimulus.' }
       ];
     } else if (absR >= 0.3) {
@@ -385,7 +387,7 @@ function renderCoach(el, d) {
       status = 'good'; color = 'var(--lime)'; bannerBg = 'rgba(132,204,22,0.1)';
       title = 'Slightly slow'; message = 'You\'re losing, but a bit under the ideal rate. Consider a small adjustment.';
       actions = [
-        { emoji: '🔥', title: 'Cut 100 kcal', detail: 'Reduce to ' + (d.cals - 100) + ' kcal.' },
+        { emoji: '🔥', title: 'Cut 100 kcal', detail: 'Reduce to ' + (d.cals - 100) + ' kcal.', applyCals: d.cals - 100 },
         { emoji: '🚶', title: 'Add 2,000 steps', detail: 'A small activity bump may be enough.' },
         { emoji: '⏳', title: 'Or just wait', detail: 'Weight loss isn\'t linear — you may see a drop soon.' }
       ];
@@ -393,7 +395,7 @@ function renderCoach(el, d) {
       status = 'stall'; color = 'var(--amber)'; bannerBg = 'rgba(245,158,11,0.1)';
       title = 'Plateau detected'; message = 'Weight hasn\'t moved meaningfully. Time to make a change.';
       actions = [
-        { emoji: '🔥', title: 'Cut 150 kcal', detail: 'Reduce to ' + (d.cals - 150) + ' kcal.' },
+        { emoji: '🔥', title: 'Cut 150 kcal', detail: 'Reduce to ' + (d.cals - 150) + ' kcal.', applyCals: d.cals - 150 },
         { emoji: '🚶', title: 'Add 3,000 steps', detail: 'Increase non-exercise activity.' },
         { emoji: '🏸', title: 'Add badminton', detail: 'Fun cardio that doesn\'t feel like cardio.' },
         { emoji: '⏳', title: 'Or wait a week', detail: 'Plateaus often break on their own. Give it 7 days.' }
@@ -412,7 +414,12 @@ function renderCoach(el, d) {
   const actualWeeks = d.rate !== null && Math.abs(d.rate) > 0.01 ? (d.cw - d.gwLo) / Math.abs(d.rate) : null;
 
   let html = `<div class="banner" style="background:${bannerBg}"><span class="bdot" style="background:${color}"></span><div class="banner-body"><h3 style="color:${color}">${title}</h3><p>${message}</p></div></div>`;
-  actions.forEach(a => { html += `<div class="action-card"><div class="emoji">${a.emoji}</div><strong>${a.title}</strong><p>${a.detail}</p></div>`; });
+  actions.forEach(a => {
+    const applyBtn = a.applyCals
+      ? `<button class="apply-btn" onclick="applyCals(${a.applyCals}, this)">Apply</button>`
+      : '';
+    html += `<div class="action-card">${applyBtn}<div class="emoji">${a.emoji}</div><strong>${a.title}</strong><p>${a.detail}</p></div>`;
+  });
 
   html += `<div class="eta-row" style="margin-top:14px">
     <div class="eta-box"><div class="eta-label">Planned pace</div><div class="eta-val">${fmt(plannedWeeks, 0)}</div><div class="eta-sub">weeks at 0.4 kg/wk</div></div>
@@ -597,6 +604,19 @@ async function deleteEntry(date) {
   showSync('saving');
   const r = await api('POST', { action: 'deleteEntry', date });
   showSync(r ? 'saved' : 'offline');
+}
+
+async function applyCals(newCals, btn) {
+  const cfg = getConfig();
+  cfg.dailyCals = String(newCals);
+  setConfig(cfg);
+  btn.textContent = 'Applied ✓';
+  btn.style.borderColor = 'var(--green)';
+  btn.style.color = 'var(--green)';
+  showSync('saving');
+  const r = await api('POST', { action: 'saveConfig', config: cfg });
+  showSync(r ? 'saved' : 'offline');
+  renderMain();
 }
 
 function editSetup() {
