@@ -595,13 +595,13 @@ function renderTrend(el, d) {
       <span><span class="swatch" style="background:#2563eb;height:3px"></span> 7d trend</span>
       <span><span class="swatch" style="background:#64748b;height:6px;width:6px;border-radius:50%"></span> Actual</span>
     </div>
-    <div style="position:relative;height:220px"><canvas id="trend-canvas"></canvas></div>`;
+    <canvas id="trend-canvas"></canvas>`;
 
   if (d.measurements.length >= 2) {
     el.innerHTML += `
       <div style="margin-top:20px">
         <div class="legend"><span><span class="swatch" style="background:#06b6d4;height:3px"></span> Waist (cm)</span></div>
-        <div style="position:relative;height:150px"><canvas id="waist-canvas"></canvas></div>
+        <canvas id="waist-canvas"></canvas>
       </div>`;
   }
 
@@ -670,7 +670,8 @@ function buildChart(d) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false,
+      maintainAspectRatio: true,
+      aspectRatio: 2,
       scales: {
         x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
         y: { min: yMin, max: yMax, ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
@@ -701,7 +702,8 @@ function buildWaistChart(d) {
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false,
+      maintainAspectRatio: true,
+      aspectRatio: 2.5,
       scales: {
         x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
         y: { ticks: { color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
